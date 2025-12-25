@@ -1,0 +1,162 @@
+================================================================================
+TEAM ACTIVITY TRACKING OPTIONS - Using Excel/Google Sheets Instead of Database
+================================================================================
+
+The goal: Keep team members synced on what everyone has done, without a database.
+
+--------------------------------------------------------------------------------
+OPTION 1: Google Sheets API (Already in the project!)
+--------------------------------------------------------------------------------
+How it works:
+- The app already uses Google Sheets API for lead tracking
+- Extend this to add a "Team Activity" or "Activity Log" sheet tab
+- Each action (add lead, mark called, etc.) writes a row with:
+  * Timestamp
+  * User name
+  * Action type
+  * Lead/business affected
+  * Notes
+
+Pros:
+- Already set up in this project (see SHEETS_SETUP.md)
+- Real-time collaboration - everyone sees updates instantly
+- Free, cloud-based, accessible anywhere
+- Built-in version history
+
+Cons:
+- Requires internet connection
+- API rate limits (300 requests/min for free tier)
+
+Implementation path:
+- Add new sheet tab "ActivityLog"
+- Create endpoint POST /api/activity to log actions
+- Create endpoint GET /api/activity to fetch recent activity
+- Add activity feed component in the React client
+
+--------------------------------------------------------------------------------
+OPTION 2: Shared Excel File (OneDrive/SharePoint)
+--------------------------------------------------------------------------------
+How it works:
+- Store an Excel file in a shared OneDrive or SharePoint folder
+- Use a library like 'exceljs' or 'xlsx' to read/write the file
+- Each team member's app reads from and writes to the same file
+
+Pros:
+- Familiar Excel format
+- Works with Microsoft 365 ecosystem
+- Can edit manually in Excel if needed
+
+Cons:
+- File locking issues if two people write simultaneously
+- Need to handle conflicts
+- Requires file system access or OneDrive API
+
+Libraries to use:
+- exceljs (npm install exceljs)
+- xlsx (npm install xlsx)
+- @microsoft/microsoft-graph-client (for OneDrive API)
+
+--------------------------------------------------------------------------------
+OPTION 3: Google Sheets as "Database" with Polling
+--------------------------------------------------------------------------------
+How it works:
+- One master Google Sheet acts as the single source of truth
+- App polls the sheet every X seconds for updates
+- Changes from any team member are visible to all
+
+Sheet structure example:
+Tab 1: Leads (already exists)
+Tab 2: TeamMembers (name, email, last_active)
+Tab 3: ActivityLog (timestamp, user, action, details)
+Tab 4: Assignments (lead_id, assigned_to, status, due_date)
+
+Pros:
+- Simple to understand
+- Easy to manually review/edit
+- No complex sync logic
+
+Cons:
+- Polling = slight delay in seeing updates
+- More API calls
+
+--------------------------------------------------------------------------------
+OPTION 4: Google Sheets + WebSocket Notifications
+--------------------------------------------------------------------------------
+How it works:
+- Use Google Sheets for storage (same as Option 1)
+- Add WebSocket server to push real-time updates to all clients
+- When one user makes a change, server notifies everyone instantly
+
+Pros:
+- Real-time updates without polling
+- Best user experience
+- Sheets still viewable/editable directly
+
+Cons:
+- More complex server setup
+- Need to manage WebSocket connections
+
+Libraries:
+- socket.io (npm install socket.io)
+- ws (npm install ws)
+
+--------------------------------------------------------------------------------
+OPTION 5: Hybrid - Local JSON + Google Sheets Sync
+--------------------------------------------------------------------------------
+How it works:
+- Each user has local JSON file for fast reads
+- Background sync pushes/pulls from Google Sheets periodically
+- Conflict resolution: last write wins, or merge strategy
+
+Pros:
+- Fast local performance
+- Works offline (syncs when back online)
+- Sheets as backup/audit trail
+
+Cons:
+- Conflict resolution complexity
+- Need sync logic
+
+--------------------------------------------------------------------------------
+RECOMMENDATION
+--------------------------------------------------------------------------------
+For your use case (team of devs staying in sync), I'd suggest:
+
+Option 1 or 3 - Extend the existing Google Sheets integration
+
+Reasons:
+1. Already set up in this project
+2. Everyone can view the sheet directly in browser
+3. No additional infrastructure needed
+4. Free and reliable
+
+Quick implementation outline:
+1. Add "ActivityLog" tab to your Google Sheet
+2. Add columns: Timestamp | User | Action | Details | LeadID
+3. Modify server.js to log activities when leads are added/updated
+4. Add simple activity feed in the React UI
+
+--------------------------------------------------------------------------------
+SHEET STRUCTURE SUGGESTION
+--------------------------------------------------------------------------------
+
+Tab: "TeamSync"
+Columns:
+A - Timestamp
+B - Team Member
+C - Action (ADD_LEAD, MARK_CALLED, UPDATE_LEAD, DELETE_LEAD, LOGIN, etc.)
+D - Lead Name (if applicable)
+E - Details/Notes
+F - Status (PENDING, COMPLETED, IN_PROGRESS)
+
+Tab: "Assignments" (optional)
+Columns:
+A - Lead ID
+B - Lead Name
+C - Assigned To
+D - Assigned Date
+E - Due Date
+F - Status
+G - Notes
+
+================================================================================
