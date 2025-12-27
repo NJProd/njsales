@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './CRM.css';
 import { initFirebase, isFirebaseConfigured, saveLead, updateFirebaseLead, subscribeToLeads, deleteLead } from './firebase';
 import Dashboard from './components/Dashboard';
 import LeadDetailModal from './components/LeadDetailModal';
-import TeamSheet from './components/TeamSheet';
 import { useUserRole, UserLoginSelector, TeamManagementPanel, UserBadge } from './components/UserRoles';
 
 // Lead status options
@@ -91,6 +91,8 @@ const BUSINESS_TYPES = [
 ];
 
 export default function CRM() {
+  const navigate = useNavigate();
+  
   // User roles hook
   const {
     currentUser,
@@ -907,7 +909,7 @@ export default function CRM() {
             <div className="tabs">
               <button className={tab === 'dashboard' ? 'active' : ''} onClick={() => setTab('dashboard')}>📊 Home</button>
               <button className={tab === 'leads' ? 'active' : ''} onClick={() => setTab('leads')}>📋 Leads <span className="count">{filtered.length}</span></button>
-              <button className={tab === 'sheet' ? 'active' : ''} onClick={() => setTab('sheet')}>📑 Sheet</button>
+              <button onClick={() => navigate('/sheet')}>📑 Sheet</button>
               <button className={tab === 'search' ? 'active' : ''} onClick={() => setTab('search')}>🔍 Find</button>
             </div>
           )}
@@ -926,16 +928,6 @@ export default function CRM() {
                 onNavigate={(lead) => {
                   setSelectedLead(lead);
                   setTab('leads');
-                }}
-              />
-            )}
-            {tab === 'sheet' && (
-              <TeamSheet
-                leads={leads}
-                team={team}
-                currentUser={currentUser}
-                onSelectLead={(lead) => {
-                  setSelectedLead(lead);
                 }}
               />
             )}
