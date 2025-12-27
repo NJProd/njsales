@@ -106,6 +106,9 @@ export default function CRM() {
     removeTeamMember
   } = useUserRole();
 
+  // Get userName from currentUser for backward compatibility
+  const userName = currentUser?.name || '';
+
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const [leads, setLeads] = useState(() => JSON.parse(localStorage.getItem('leads') || '[]'));
