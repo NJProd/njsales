@@ -545,6 +545,9 @@ export default function CRM() {
     }
   }
 
+  // Filter leads based on user permissions
+  const visibleLeads = leads.filter(lead => canViewLead(lead));
+
   // Filter leads based on current filters AND user permissions
   const filtered = visibleLeads.filter(l => {
     if (filters.noWeb && l.website) return false;
@@ -646,9 +649,6 @@ export default function CRM() {
   if (!currentUser) {
     return <UserLoginSelector team={team} onLogin={login} />;
   }
-
-  // Filter leads based on user permissions
-  const visibleLeads = leads.filter(lead => canViewLead(lead));
 
   return (
     <div className="app">
