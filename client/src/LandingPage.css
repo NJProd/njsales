@@ -33,20 +33,20 @@
 
 /* CSS Variables */
 .landing-page {
-  --primary: #6366f1;
-  --primary-dark: #4f46e5;
-  --primary-light: #818cf8;
-  --secondary: #0f172a;
-  --accent: #22d3ee;
-  --text-primary: #1e293b;
-  --text-secondary: #64748b;
-  --text-light: #94a3b8;
+  --primary: #2a9d8f;
+  --primary-dark: #238b7e;
+  --primary-light: #3ab5a6;
+  --secondary: #1a3a5c;
+  --accent: #2a9d8f;
+  --text-primary: #1a3a5c;
+  --text-secondary: #4a6a8a;
+  --text-light: #6a8aaa;
   --bg-primary: #ffffff;
   --bg-secondary: #f8fafc;
-  --bg-dark: #0f172a;
+  --bg-dark: #1a3a5c;
   --border: #e2e8f0;
-  --gradient: linear-gradient(135deg, #6366f1 0%, #22d3ee 100%);
-  --gradient-text: linear-gradient(135deg, #6366f1 0%, #22d3ee 100%);
+  --gradient: linear-gradient(135deg, #1a3a5c 0%, #2a9d8f 100%);
+  --gradient-text: linear-gradient(135deg, #1a3a5c 0%, #2a9d8f 100%);
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
@@ -101,7 +101,7 @@
 .landing-page .section-tag {
   display: inline-block;
   padding: 8px 16px;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(34, 211, 238, 0.1) 100%);
+  background: linear-gradient(135deg, rgba(26, 58, 92, 0.1) 0%, rgba(42, 157, 143, 0.1) 100%);
   color: var(--primary);
   font-size: 0.875rem;
   font-weight: 600;
@@ -138,12 +138,12 @@
 .landing-page .btn-primary {
   background: var(--gradient);
   color: white;
-  box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.4);
+  box-shadow: 0 4px 14px 0 rgba(42, 157, 143, 0.4);
 }
 
 .landing-page .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px 0 rgba(99, 102, 241, 0.5);
+  box-shadow: 0 6px 20px 0 rgba(42, 157, 143, 0.5);
 }
 
 .landing-page .btn-secondary {
@@ -190,7 +190,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.03) 0%, rgba(34, 211, 238, 0.03) 100%);
+  background: linear-gradient(135deg, rgba(26, 58, 92, 0.03) 0%, rgba(42, 157, 143, 0.03) 100%);
   pointer-events: none;
   z-index: -1;
 }
@@ -229,6 +229,21 @@
   gap: 8px;
   font-weight: 700;
   font-size: 1.25rem;
+}
+
+.landing-page .logo-img {
+  height: 45px;
+  width: auto;
+}
+
+.landing-page .footer-logo .logo-img {
+  height: 60px;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.landing-page .footer-logo:active .logo-img {
+  transform: scale(0.95);
 }
 
 .landing-page .logo-nj {

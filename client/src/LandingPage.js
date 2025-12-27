@@ -1,9 +1,34 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './LandingPage.css';
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const clickCountRef = useRef(0);
+  const clickTimerRef = useRef(null);
+
+  // Hidden CRM access - 5 clicks on footer logo
+  const handleFooterLogoClick = useCallback((e) => {
+    e.preventDefault();
+    clickCountRef.current++;
+    
+    if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+    clickTimerRef.current = setTimeout(() => { clickCountRef.current = 0; }, 2000);
+    
+    if (clickCountRef.current >= 5) {
+      clickCountRef.current = 0;
+      navigate('/crm');
+    }
+  }, [navigate]);
+
+  // Form submission
+  const handleFormSubmit = (e) => {
+    e.preventDefault();
+    alert('Thanks for reaching out! We\'ll get back to you within 24 hours.');
+    e.target.reset();
+  };
 
   useEffect(() => {
     // Update document title
@@ -15,113 +40,43 @@ export default function LandingPage() {
     faLink.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css';
     document.head.appendChild(faLink);
 
-    // Mobile navigation toggle
-    const hamburger = document.querySelector('.hamburger');
-    const navLinks = document.querySelector('.nav-links');
-    
-    const handleHamburgerClick = () => {
-      hamburger?.classList.toggle('active');
-      navLinks?.classList.toggle('active');
-    };
-    
-    hamburger?.addEventListener('click', handleHamburgerClick);
-
-    // Close mobile menu when clicking a link
-    const navLinksList = document.querySelectorAll('.nav-links a');
-    navLinksList.forEach(link => {
-      link.addEventListener('click', () => {
-        hamburger?.classList.remove('active');
-        navLinks?.classList.remove('active');
-      });
-    });
-
     // Navbar scroll effect
-    const navbar = document.querySelector('.navbar');
     const handleScroll = () => {
-      if (window.scrollY > 50) {
-        navbar?.classList.add('scrolled');
-      } else {
-        navbar?.classList.remove('scrolled');
-      }
-      
-      // Scroll progress
-      const scrollProgress = document.querySelector('.scroll-progress');
-      if (scrollProgress) {
-        const scrollTop = window.scrollY;
-        const docHeight = document.documentElement.scrollHeight - window.innerHeight;
-        const scrollPercent = (scrollTop / docHeight) * 100;
-        scrollProgress.style.width = scrollPercent + '%';
-      }
+      setScrolled(window.scrollY > 50);
     };
     
     window.addEventListener('scroll', handleScroll);
 
-    // Hidden CRM access - click footer logo 5 times
-    const footerLogo = document.getElementById('footer-logo-secret');
-    let clickCount = 0;
-    let clickTimer = null;
-    
-    const handleLogoClick = (e) => {
-      e.preventDefault();
-      clickCount++;
-      
-      if (clickTimer) clearTimeout(clickTimer);
-      clickTimer = setTimeout(() => { clickCount = 0; }, 2000);
-      
-      if (clickCount >= 5) {
-        clickCount = 0;
-        navigate('/crm');
-      }
-    };
-    
-    footerLogo?.addEventListener('click', handleLogoClick);
-
-    // Form submission
-    const contactForm = document.getElementById('contactForm');
-    const handleFormSubmit = (e) => {
-      e.preventDefault();
-      alert('Thanks for reaching out! We\'ll get back to you within 24 hours.');
-      contactForm?.reset();
-    };
-    
-    contactForm?.addEventListener('submit', handleFormSubmit);
-
     // Cleanup
     return () => {
-      hamburger?.removeEventListener('click', handleHamburgerClick);
       window.removeEventListener('scroll', handleScroll);
-      footerLogo?.removeEventListener('click', handleLogoClick);
-      contactForm?.removeEventListener('submit', handleFormSubmit);
       if (document.head.contains(faLink)) {
         document.head.removeChild(faLink);
       }
+      if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
     };
-  }, [navigate]);
+  }, []);
 
   return (
     <div className="landing-page">
-      {/* Scroll Progress Bar */}
-      <div className="scroll-progress"></div>
-      
       {/* Animated Background */}
       <div className="bg-gradient-animation"></div>
       
       {/* Navigation */}
-      <nav className="navbar">
+      <nav className={`navbar ${scrolled ? 'scrolled' : ''}`}>
         <div className="nav-container">
           <a href="#home" className="logo">
-            <span className="logo-nj">NJ</span>
-            <span className="logo-text">Developments</span>
+            <img src="/logo.png" alt="NJ Developments" className="logo-img" />
           </a>
-          <ul className="nav-links">
-            <li><a href="#home">Home</a></li>
-            <li><a href="#services">Services</a></li>
-            <li><a href="#portfolio">Portfolio</a></li>
-            <li><a href="#process">Process</a></li>
-            <li><a href="#about">About</a></li>
-            <li><a href="#contact" className="btn-nav">Get Started</a></li>
+          <ul className={`nav-links ${mobileMenuOpen ? 'active' : ''}`}>
+            <li><a href="#home" onClick={() => setMobileMenuOpen(false)}>Home</a></li>
+            <li><a href="#services" onClick={() => setMobileMenuOpen(false)}>Services</a></li>
+            <li><a href="#portfolio" onClick={() => setMobileMenuOpen(false)}>Portfolio</a></li>
+            <li><a href="#process" onClick={() => setMobileMenuOpen(false)}>Process</a></li>
+            <li><a href="#about" onClick={() => setMobileMenuOpen(false)}>About</a></li>
+            <li><a href="#contact" className="btn-nav" onClick={() => setMobileMenuOpen(false)}>Get Started</a></li>
           </ul>
-          <div className="hamburger">
+          <div className={`hamburger ${mobileMenuOpen ? 'active' : ''}`} onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
             <span></span>
             <span></span>
             <span></span>
@@ -469,7 +424,7 @@ export default function LandingPage() {
                 </div>
               </div>
             </div>
-            <form className="contact-form" id="contactForm">
+            <form className="contact-form" onSubmit={handleFormSubmit}>
               <div className="form-group">
                 <input type="text" name="name" placeholder="Your Name" required />
               </div>
@@ -503,10 +458,9 @@ export default function LandingPage() {
         <div className="container">
           <div className="footer-content">
             <div className="footer-brand">
-              <a href="#home" className="logo" id="footer-logo-secret">
-                <span className="logo-nj">NJ</span>
-                <span className="logo-text">Developments</span>
-              </a>
+              <div className="logo footer-logo" onClick={handleFooterLogoClick} style={{cursor: 'pointer'}}>
+                <img src="/logo.png" alt="NJ Developments" className="logo-img" />
+              </div>
               <p>Building digital solutions that drive real business growth.</p>
             </div>
             <div className="footer-links">

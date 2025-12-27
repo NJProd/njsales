@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './CRM.css';
-import { initFirebase, isFirebaseConfigured, saveLead, updateFirebaseLead, subscribeToLeads } from './firebase';
+import { initFirebase, isFirebaseConfigured, saveLead, updateFirebaseLead, subscribeToLeads, deleteLead } from './firebase';
+import Dashboard from './components/Dashboard';
+import LeadDetailModal from './components/LeadDetailModal';
+import { useUserRole, UserLoginSelector, TeamManagementPanel, UserBadge } from './components/UserRoles';
 
 // Lead status options
 const LEAD_STATUSES = [
@@ -87,6 +90,22 @@ const BUSINESS_TYPES = [
 ];
 
 export default function CRM() {
+  // User roles hook
+  const {
+    currentUser,
+    team,
+    login,
+    logout,
+    hasPermission,
+    isAdmin,
+    canViewLead,
+    canEditLead,
+    canDeleteLead,
+    addTeamMember,
+    updateTeamMember,
+    removeTeamMember
+  } = useUserRole();
+
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const [leads, setLeads] = useState(() => JSON.parse(localStorage.getItem('leads') || '[]'));
@@ -101,10 +120,6 @@ export default function CRM() {
   const markers = useRef([]);
   const searchCircle = useRef(null);
   const placesServiceDiv = useRef(null);
-  
-  // User identification
-  const [userName, setUserName] = useState(() => localStorage.getItem('userName') || '');
-  const [nameInput, setNameInput] = useState('');
   
   // Lead detail modal
   const [selectedLead, setSelectedLead] = useState(null);
@@ -125,6 +140,7 @@ export default function CRM() {
   const [radius, setRadius] = useState(8047); // 5 miles default
   const [businessType, setBusinessType] = useState('');
   const [searchCenter, setSearchCenter] = useState(null);
+  const [pagination, setPagination] = useState(null);
 
   // Keep leadsRef in sync with leads state
   useEffect(() => { 
@@ -275,7 +291,7 @@ export default function CRM() {
     });
   }
 
-  function search() {
+  function search(loadMore = false) {
     if (!mapInstance.current) return;
     
     // If loading more, use the pagination object
@@ -343,7 +359,7 @@ export default function CRM() {
         phone: null, website: null, 
         status: 'NEW',           // Lead status
         notes: '',               // User notes
-        addedBy: userName,       // Who added this lead
+        addedBy: currentUser?.name || 'Unknown',       // Who added this lead
         assignedTo: '',          // Who's handling it
         callHistory: [],         // Array of call logs
         addedAt: Date.now(),
@@ -398,7 +414,7 @@ export default function CRM() {
         phone: null, website: null, 
         status: 'NEW',
         notes: '',
-        addedBy: userName,
+        addedBy: currentUser?.name || 'Unknown',
         assignedTo: '',
         callHistory: [],
         addedAt: Date.now(),
@@ -526,8 +542,8 @@ export default function CRM() {
     }
   }
 
-  // Filter leads based on current filters
-  const filtered = leads.filter(l => {
+  // Filter leads based on current filters AND user permissions
+  const filtered = visibleLeads.filter(l => {
     if (filters.noWeb && l.website) return false;
     if (filters.noPhone && l.phone) return false;
     if (filters.notCalled && l.status !== 'NEW') return false; // Show only NEW leads
@@ -548,7 +564,7 @@ export default function CRM() {
   });
 
   // Get only marked leads (not NEW)
-  const markedLeads = leads.filter(l => l.status !== 'NEW');
+  const markedLeads = visibleLeads.filter(l => l.status !== 'NEW');
 
   // Export marked leads to downloadable file
   function exportLeads() {
@@ -623,164 +639,51 @@ export default function CRM() {
     );
   }
 
-  // Lead Detail Modal Component
-  const LeadDetailModal = () => {
-    if (!selectedLead) return null;
-    
-    const [editNotes, setEditNotes] = useState(selectedLead.notes || '');
-    const [callNotes, setCallNotes] = useState('');
-    const [showCallLog, setShowCallLog] = useState(false);
-    
-    const handleStatusChange = (newStatus) => {
-      updateLeadStatus(selectedLead.id, newStatus);
-      setSelectedLead(prev => ({ ...prev, status: newStatus }));
-    };
-    
-    const handleSaveNotes = () => {
-      updateLead(selectedLead.id, { notes: editNotes });
-      setSelectedLead(prev => ({ ...prev, notes: editNotes }));
-    };
-    
-    const handleLogCall = (outcome) => {
-      logCall(selectedLead.id, outcome, callNotes);
-      if (outcome === 'CALLBACK') handleStatusChange('CALLBACK');
-      else if (outcome === 'REJECTED') handleStatusChange('REJECTED');
-      else if (outcome === 'INTERESTED') handleStatusChange('INTERESTED');
-      else handleStatusChange('CALLED');
-      setCallNotes('');
-      setShowCallLog(false);
-    };
-    
-    const statusObj = LEAD_STATUSES.find(s => s.value === selectedLead.status) || LEAD_STATUSES[0];
-    
-    return (
-      <div className="modal-overlay" onClick={() => setSelectedLead(null)}>
-        <div className="modal" onClick={e => e.stopPropagation()}>
-          <div className="modal-header">
-            <h2>{selectedLead.name}</h2>
-            <button className="close-btn" onClick={() => setSelectedLead(null)}>×</button>
-          </div>
-          
-          <div className="modal-body">
-            {/* Status */}
-            <div className="modal-section">
-              <label>Status</label>
-              <div className="status-buttons">
-                {LEAD_STATUSES.map(s => (
-                  <button 
-                    key={s.value} 
-                    className={`status-btn ${selectedLead.status === s.value ? 'active' : ''}`}
-                    style={{ '--status-color': s.color }}
-                    onClick={() => handleStatusChange(s.value)}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            
-            {/* Contact Info */}
-            <div className="modal-section">
-              <label>Contact</label>
-              <div className="contact-info">
-                <div className="contact-row">
-                  <span>📍</span>
-                  <span>{selectedLead.address}</span>
-                </div>
-                {selectedLead.phone && (
-                  <div className="contact-row clickable" onClick={() => window.open(`tel:${selectedLead.phone}`)}>
-                    <span>📞</span>
-                    <span>{selectedLead.phone}</span>
-                    <button className="action-btn">Call</button>
-                  </div>
-                )}
-                {selectedLead.website && (
-                  <div className="contact-row clickable" onClick={() => window.open(selectedLead.website, '_blank')}>
-                    <span>🌐</span>
-                    <span>Website</span>
-                    <button className="action-btn">Open</button>
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            {/* Quick Call Actions */}
-            <div className="modal-section">
-              <label>Log a Call</label>
-              {!showCallLog ? (
-                <button className="log-call-btn" onClick={() => setShowCallLog(true)}>📞 Log Call Outcome</button>
-              ) : (
-                <div className="call-log-form">
-                  <textarea 
-                    placeholder="Call notes (optional)..." 
-                    value={callNotes} 
-                    onChange={e => setCallNotes(e.target.value)}
-                  />
-                  <div className="call-outcomes">
-                    <button onClick={() => handleLogCall('NO_ANSWER')}>No Answer</button>
-                    <button onClick={() => handleLogCall('CALLBACK')}>Callback</button>
-                    <button onClick={() => handleLogCall('REJECTED')}>Rejected</button>
-                    <button onClick={() => handleLogCall('INTERESTED')}>Interested!</button>
-                  </div>
-                  <button className="cancel-btn" onClick={() => setShowCallLog(false)}>Cancel</button>
-                </div>
-              )}
-            </div>
-            
-            {/* Notes */}
-            <div className="modal-section">
-              <label>Notes</label>
-              <textarea 
-                className="notes-textarea"
-                placeholder="Add notes about this lead..."
-                value={editNotes}
-                onChange={e => setEditNotes(e.target.value)}
-                onBlur={handleSaveNotes}
-              />
-            </div>
-            
-            {/* Call History */}
-            {selectedLead.callHistory && selectedLead.callHistory.length > 0 && (
-              <div className="modal-section">
-                <label>Call History ({selectedLead.callHistory.length})</label>
-                <div className="call-history">
-                  {selectedLead.callHistory.slice().reverse().map((call, i) => (
-                    <div key={i} className="call-entry">
-                      <div className="call-meta">
-                        <span className="call-outcome">{call.outcome}</span>
-                        <span className="call-date">{new Date(call.date).toLocaleDateString()}</span>
-                        <span className="call-user">by {call.user}</span>
-                      </div>
-                      {call.notes && <div className="call-notes">{call.notes}</div>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            
-            {/* Meta info */}
-            <div className="modal-section meta">
-              <span>Added by {selectedLead.addedBy || 'Unknown'}</span>
-              <span>•</span>
-              <span>{new Date(selectedLead.addedAt).toLocaleDateString()}</span>
-            </div>
-          </div>
-          
-          <div className="modal-footer">
-            <button className="zoom-btn" onClick={() => { zoomToLead(selectedLead); setSelectedLead(null); }}>📍 Zoom to Map</button>
-            <button className="delete-btn" onClick={() => { removeLead(selectedLead.id); }}>🗑️ Delete Lead</button>
-          </div>
-        </div>
-      </div>
-    );
-  };
+  // Show login selector if no user logged in
+  if (!currentUser) {
+    return <UserLoginSelector team={team} onLogin={login} />;
+  }
+
+  // Filter leads based on user permissions
+  const visibleLeads = leads.filter(lead => canViewLead(lead));
 
   return (
     <div className="app">
       <div className="map" ref={mapRef} />
       
       {/* Lead Detail Modal */}
-      {selectedLead && <LeadDetailModal />}
+      {selectedLead && (
+        <LeadDetailModal 
+          lead={selectedLead}
+          statuses={LEAD_STATUSES}
+          teamMembers={team.map(t => t.name)}
+          currentUser={currentUser}
+          onClose={() => setSelectedLead(null)}
+          onUpdate={(updates) => {
+            if (canEditLead(selectedLead)) {
+              updateLead(selectedLead.id, updates);
+              setSelectedLead(prev => ({ ...prev, ...updates }));
+            }
+          }}
+          onStatusChange={(status) => {
+            if (canEditLead(selectedLead)) {
+              updateLeadStatus(selectedLead.id, status);
+              setSelectedLead(prev => ({ ...prev, status }));
+            }
+          }}
+          onLogCall={(outcome, notes) => {
+            logCall(selectedLead.id, outcome, notes);
+          }}
+          onDelete={() => {
+            if (canDeleteLead()) {
+              removeLead(selectedLead.id);
+            }
+          }}
+          onZoom={() => { zoomToLead(selectedLead); setSelectedLead(null); }}
+          canEdit={canEditLead(selectedLead)}
+          canDelete={canDeleteLead()}
+        />
+      )}
       
       {/* Settings Modal */}
       {showSettings && (
@@ -894,18 +797,38 @@ export default function CRM() {
           {panelOpen && (
             <>
               <div className="tabs">
+                <button className={tab === 'dashboard' ? 'active' : ''} onClick={() => setTab('dashboard')}>📊</button>
                 <button className={tab === 'leads' ? 'active' : ''} onClick={() => setTab('leads')}>Leads <span className="count">{filtered.length}</span></button>
                 <button className={tab === 'search' ? 'active' : ''} onClick={() => setTab('search')}>Search</button>
+                {isAdmin() && (
+                  <button className={tab === 'team' ? 'active' : ''} onClick={() => setTab('team')}>👥</button>
+                )}
               </div>
               <button className="settings-btn" onClick={() => setShowSettings(true)} title="Settings">⚙️</button>
-              <div className="user-badge" title={userName}>
-                {userName.slice(0, 2).toUpperCase()}
-              </div>
+              <UserBadge user={currentUser} onLogout={logout} />
             </>
           )}
         </div>
         {panelOpen && (
           <div className="panel-body">
+            {tab === 'dashboard' && (
+              <Dashboard 
+                leads={visibleLeads} 
+                onNavigate={(lead) => {
+                  setSelectedLead(lead);
+                  setTab('leads');
+                }}
+              />
+            )}
+            {tab === 'team' && isAdmin() && (
+              <TeamManagementPanel
+                team={team}
+                currentUser={currentUser}
+                onAddMember={addTeamMember}
+                onUpdateMember={updateTeamMember}
+                onRemoveMember={removeTeamMember}
+              />
+            )}
             {tab === 'search' && (
               <div className="search-section">
                 <div className="search-controls">
