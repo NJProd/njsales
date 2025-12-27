@@ -127,6 +127,13 @@ export default function CRM() {
   // Lead detail modal
   const [selectedLead, setSelectedLead] = useState(null);
   
+  // Lead search filter
+  const [leadSearch, setLeadSearch] = useState('');
+  
+  // Bulk selection
+  const [selectedLeadIds, setSelectedLeadIds] = useState(new Set());
+  const [bulkMode, setBulkMode] = useState(false);
+  
   // Quick action menu
   const [openMenuId, setOpenMenuId] = useState(null);
   const [quickNote, setQuickNote] = useState('');
@@ -135,9 +142,8 @@ export default function CRM() {
   const [showSettings, setShowSettings] = useState(false);
   const [sheetsUrlInput, setSheetsUrlInput] = useState(() => localStorage.getItem('sheetsUrl') || '');
   
-  // Firebase config
-  const [firebaseConfigInput, setFirebaseConfigInput] = useState('');
-  const [firebaseConnected, setFirebaseConnected] = useState(() => isFirebaseConfigured());
+  // Firebase is hardcoded and always connected
+  const firebaseConnected = true;
   
   // Search controls
   const [radius, setRadius] = useState(8047); // 5 miles default
@@ -171,6 +177,28 @@ export default function CRM() {
       return () => document.removeEventListener('click', handleClickOutside);
     }
   }, [openMenuId]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Esc to close modals
+      if (e.key === 'Escape') {
+        if (selectedLead) setSelectedLead(null);
+        else if (showSettings) setShowSettings(false);
+        else if (bulkMode) {
+          setBulkMode(false);
+          setSelectedLeadIds(new Set());
+        }
+      }
+      // Ctrl/Cmd + F to focus search
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f' && tab === 'leads') {
+        e.preventDefault();
+        document.getElementById('lead-search-input')?.focus();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [selectedLead, showSettings, bulkMode, tab]);
 
   // Firebase real-time sync
   useEffect(() => {
@@ -577,6 +605,10 @@ export default function CRM() {
   function removeLead(id) { 
     setLeads(prev => prev.filter(l => l.id !== id)); 
     if (selectedLead?.id === id) setSelectedLead(null);
+    // Sync delete to Firebase
+    if (firebaseConnected) {
+      deleteLead(id).catch(err => console.error('Firebase delete error:', err));
+    }
   }
 
   function clearAllLeads() {
@@ -593,11 +625,90 @@ export default function CRM() {
     }
   }
 
+  // Calculate lead score (0-100)
+  function getLeadScore(lead) {
+    let score = 50; // Base score
+    
+    // No website = hot lead (+20)
+    if (!lead.website) score += 20;
+    
+    // Has phone = can contact (+10)
+    if (lead.phone) score += 10;
+    
+    // Good ratings boost
+    if (lead.rating >= 4.5) score += 10;
+    else if (lead.rating >= 4) score += 5;
+    else if (lead.rating < 3 && lead.rating > 0) score -= 10;
+    
+    // Review count (established business)
+    if (lead.userRatingsTotal >= 100) score += 10;
+    else if (lead.userRatingsTotal >= 50) score += 5;
+    else if (lead.userRatingsTotal < 10) score -= 5;
+    
+    // Status adjustments
+    if (lead.status === 'INTERESTED') score += 15;
+    if (lead.status === 'CALLBACK') score += 10;
+    if (lead.status === 'REJECTED') score -= 30;
+    
+    return Math.max(0, Math.min(100, score));
+  }
+
+  // Bulk actions
+  function toggleLeadSelection(id) {
+    setSelectedLeadIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function selectAllFiltered() {
+    setSelectedLeadIds(new Set(filtered.map(l => l.id)));
+  }
+
+  function clearSelection() {
+    setSelectedLeadIds(new Set());
+  }
+
+  function bulkUpdateStatus(newStatus) {
+    selectedLeadIds.forEach(id => {
+      updateLeadStatus(id, newStatus);
+    });
+    setSelectedLeadIds(new Set());
+    setBulkMode(false);
+  }
+
+  function bulkDelete() {
+    if (window.confirm(`Delete ${selectedLeadIds.size} leads? This cannot be undone.`)) {
+      selectedLeadIds.forEach(id => {
+        removeLead(id);
+      });
+      setSelectedLeadIds(new Set());
+      setBulkMode(false);
+    }
+  }
+
+  // Copy to clipboard helper
+  function copyToClipboard(text, label) {
+    navigator.clipboard.writeText(text).then(() => {
+      // Brief visual feedback could be added here
+    }).catch(err => console.error('Copy failed:', err));
+  }
+
   // Filter leads based on user permissions
   const visibleLeads = leads.filter(lead => canViewLead(lead));
 
-  // Filter leads based on current filters AND user permissions
+  // Filter leads based on current filters, search, AND user permissions
   const filtered = visibleLeads.filter(l => {
+    // Text search filter
+    if (leadSearch) {
+      const searchLower = leadSearch.toLowerCase();
+      const matchesName = l.name?.toLowerCase().includes(searchLower);
+      const matchesAddress = l.address?.toLowerCase().includes(searchLower);
+      const matchesPhone = l.phone?.includes(leadSearch);
+      if (!matchesName && !matchesAddress && !matchesPhone) return false;
+    }
     if (filters.noWeb && l.website) return false;
     if (filters.noPhone && l.phone) return false;
     if (filters.notCalled && l.status !== 'NEW') return false; // Show only NEW leads
@@ -612,6 +723,7 @@ export default function CRM() {
       case 'rating-high': return (b.rating || 0) - (a.rating || 0);
       case 'name': return (a.name || '').localeCompare(b.name || '');
       case 'oldest': return (a.addedAt || 0) - (b.addedAt || 0);
+      case 'score': return getLeadScore(b) - getLeadScore(a); // Highest score first
       case 'newest':
       default: return (b.addedAt || 0) - (a.addedAt || 0);
     }
@@ -722,49 +834,12 @@ export default function CRM() {
             </div>
             <div className="modal-body">
               <div className="modal-section">
-                <label>🔥 Firebase Sync {firebaseConnected && <span style={{color: '#22c55e'}}>● Connected</span>}</label>
-                <p className="help-text">Paste your Firebase config JSON to enable real-time team sync</p>
-                <textarea
-                  placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","databaseURL":"..."}'
-                  value={firebaseConfigInput}
-                  onChange={e => setFirebaseConfigInput(e.target.value)}
-                  className="settings-input"
-                  rows={4}
-                  style={{fontFamily: 'monospace', fontSize: '11px'}}
-                />
-                <button 
-                  className="save-settings-btn"
-                  onClick={() => {
-                    try {
-                      const config = JSON.parse(firebaseConfigInput);
-                      if (!config.apiKey || !config.databaseURL) {
-                        throw new Error('Missing required fields');
-                      }
-                      localStorage.setItem('firebaseConfig', JSON.stringify(config));
-                      initFirebase();
-                      setFirebaseConnected(true);
-                      setFirebaseConfigInput('');
-                      alert('Firebase connected! Leads will now sync in real-time.');
-                    } catch (e) {
-                      alert('Invalid config. Make sure it\'s valid JSON with apiKey and databaseURL.');
-                    }
-                  }}
-                >
-                  🔗 Connect Firebase
-                </button>
-                {firebaseConnected && (
-                  <button 
-                    className="danger-btn"
-                    style={{marginTop: '8px'}}
-                    onClick={() => {
-                      localStorage.removeItem('firebaseConfig');
-                      setFirebaseConnected(false);
-                      alert('Disconnected from Firebase. Using local storage only.');
-                    }}
-                  >
-                    Disconnect Firebase
-                  </button>
-                )}
+                <label>🔥 Firebase Sync <span style={{color: '#22c55e'}}>● Connected</span></label>
+                <p className="help-text">Real-time team sync is active. All leads sync automatically between team members.</p>
+                <div className="firebase-status-box">
+                  <span className="status-indicator-dot connected"></span>
+                  <span>njdevelopmentsales</span>
+                </div>
               </div>
               <div className="modal-section">
                 <label>Google Sheets Web App URL</label>
@@ -936,6 +1011,21 @@ export default function CRM() {
             )}
             {tab === 'leads' && (
               <>
+                {/* Search Input */}
+                <div className="lead-search-container">
+                  <input
+                    id="lead-search-input"
+                    type="text"
+                    placeholder="🔍 Search leads by name, address, or phone..."
+                    value={leadSearch}
+                    onChange={e => setLeadSearch(e.target.value)}
+                    className="lead-search-input"
+                  />
+                  {leadSearch && (
+                    <button className="clear-search-btn" onClick={() => setLeadSearch('')}>×</button>
+                  )}
+                </div>
+                
                 <div className="filters">
                   <label><input type="checkbox" checked={filters.noWeb} onChange={() => setFilters(f => ({ ...f, noWeb: !f.noWeb }))} /> No Website</label>
                   <label><input type="checkbox" checked={filters.noPhone} onChange={() => setFilters(f => ({ ...f, noPhone: !f.noPhone }))} /> No Phone</label>
@@ -962,8 +1052,46 @@ export default function CRM() {
                     <option value="rating-low">Rating: Low→High</option>
                     <option value="rating-high">Rating: High→Low</option>
                     <option value="name">Name A-Z</option>
+                    <option value="score">Lead Score</option>
                   </select>
                 </div>
+                
+                {/* Bulk Actions Bar */}
+                <div className="bulk-actions-bar">
+                  <div className="bulk-left">
+                    <button 
+                      className={`bulk-toggle-btn ${bulkMode ? 'active' : ''}`}
+                      onClick={() => {
+                        setBulkMode(!bulkMode);
+                        if (bulkMode) setSelectedLeadIds(new Set());
+                      }}
+                    >
+                      {bulkMode ? '✕ Cancel' : '☑️ Select'}
+                    </button>
+                    {bulkMode && (
+                      <>
+                        <button className="bulk-select-all" onClick={selectAllFiltered}>
+                          Select All ({filtered.length})
+                        </button>
+                        <span className="bulk-count">{selectedLeadIds.size} selected</span>
+                      </>
+                    )}
+                  </div>
+                  {bulkMode && selectedLeadIds.size > 0 && (
+                    <div className="bulk-right">
+                      <select 
+                        className="bulk-status-select"
+                        onChange={e => { if (e.target.value) bulkUpdateStatus(e.target.value); }}
+                        defaultValue=""
+                      >
+                        <option value="">Set Status...</option>
+                        {LEAD_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                      </select>
+                      <button className="bulk-delete-btn" onClick={bulkDelete}>🗑️ Delete</button>
+                    </div>
+                  )}
+                </div>
+                
                 <div className="list-header">
                   <span className="lead-count">{filtered.length} of {leads.length} leads {markedLeads.length > 0 && `(${markedLeads.length} marked)`}</span>
                   <div className="list-actions">
@@ -972,24 +1100,62 @@ export default function CRM() {
                   </div>
                 </div>
                 <div className="list">
-                  {filtered.length === 0 && <div className="empty">No leads yet. Search to add some!</div>}
+                  {filtered.length === 0 && <div className="empty">{leadSearch ? 'No leads match your search' : 'No leads yet. Search to add some!'}</div>}
                   {filtered.map(lead => {
                     const statusObj = LEAD_STATUSES.find(s => s.value === lead.status) || LEAD_STATUSES[0];
                     const isMenuOpen = openMenuId === lead.id;
+                    const score = getLeadScore(lead);
+                    const isSelected = selectedLeadIds.has(lead.id);
                     return (
                       <div 
                         key={lead.id} 
-                        className={`item ${lead.status === 'INTERESTED' || lead.status === 'CLOSED' ? 'done' : ''}`}
+                        className={`item ${lead.status === 'INTERESTED' || lead.status === 'CLOSED' ? 'done' : ''} ${isSelected ? 'selected' : ''}`}
                       >
+                        {bulkMode && (
+                          <div className="bulk-checkbox" onClick={() => toggleLeadSelection(lead.id)}>
+                            <input type="checkbox" checked={isSelected} readOnly />
+                          </div>
+                        )}
                         <div className="status-indicator" style={{ background: statusObj.color }} title={statusObj.label}></div>
-                        <div className="item-info" onClick={() => setSelectedLead(lead)} style={{ cursor: 'pointer' }}>
-                          <div className="item-name">{lead.name}</div>
+                        <div className="item-info" onClick={() => !bulkMode && setSelectedLead(lead)} style={{ cursor: bulkMode ? 'default' : 'pointer' }}>
+                          <div className="item-name-row">
+                            <span className="item-name">{lead.name}</span>
+                            <span className={`lead-score score-${score >= 70 ? 'hot' : score >= 50 ? 'warm' : 'cold'}`} title="Lead Score">
+                              {score}
+                            </span>
+                          </div>
                           <div className="item-addr">{lead.address}</div>
+                          
+                          {/* Quick Contact Row */}
+                          <div className="quick-contact-row">
+                            {lead.phone && (
+                              <>
+                                <a href={`tel:${lead.phone}`} className="quick-call-btn" onClick={e => e.stopPropagation()} title="Call">
+                                  📞 {lead.phone}
+                                </a>
+                                <button 
+                                  className="copy-btn" 
+                                  onClick={(e) => { e.stopPropagation(); copyToClipboard(lead.phone, 'Phone'); }}
+                                  title="Copy phone"
+                                >
+                                  📋
+                                </button>
+                              </>
+                            )}
+                            <button 
+                              className="copy-btn" 
+                              onClick={(e) => { e.stopPropagation(); copyToClipboard(lead.address, 'Address'); }}
+                              title="Copy address"
+                            >
+                              📍
+                            </button>
+                          </div>
+                          
                           <div className="item-tags">
                             {lead.status !== 'NEW' && <span className="tag status-tag" style={{ background: statusObj.color + '33', color: statusObj.color }}>{statusObj.label}</span>}
                             {lead.userRatingsTotal > 0 && <span className="tag ok">⭐ {lead.userRatingsTotal}</span>}
-                            {lead.phone ? <span className="tag ok">📞</span> : <span className="tag bad">No 📞</span>}
-                            {lead.website ? <span className="tag ok">🌐</span> : <span className="tag bad">No 🌐</span>}
+                            {!lead.phone && <span className="tag bad">No 📞</span>}
+                            {!lead.website && <span className="tag hot">No 🌐</span>}
                             {lead.status === 'NEW' && <span className="tag new-tag">N</span>}
                             {lead.notes && <span className="tag ok">📝</span>}
                           </div>
