@@ -162,12 +162,25 @@ export default function CRM() {
   useEffect(() => { pinDropModeRef.current = pinDropMode; }, [pinDropMode]);
   useEffect(() => { radiusRef.current = radius; }, [radius]);
 
-  // Keep leadsRef in sync with leads state
+  // Keep leadsRef in sync with leads state and sync changes to Firebase
+  const prevLeadsRef = useRef([]);
   useEffect(() => { 
     leadsRef.current = leads;
     localStorage.setItem('leads', JSON.stringify(leads)); 
-    updateMarkers(); 
-  }, [leads]);
+    updateMarkers();
+    
+    // Sync new or updated leads to Firebase
+    if (firebaseConnected && leads.length > 0) {
+      leads.forEach(lead => {
+        const prevLead = prevLeadsRef.current.find(l => l.id === lead.id);
+        // If lead is new or updated, sync to Firebase
+        if (!prevLead || lead.lastUpdated !== prevLead.lastUpdated) {
+          saveLead(lead);
+        }
+      });
+    }
+    prevLeadsRef.current = leads;
+  }, [leads, firebaseConnected]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -200,25 +213,13 @@ export default function CRM() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [selectedLead, showSettings, bulkMode, tab]);
 
-  // Firebase real-time sync
+  // Firebase real-time sync - Firebase is the source of truth
   useEffect(() => {
     if (!firebaseConnected) return;
     const unsubscribe = subscribeToLeads((firebaseLeads) => {
-      // Merge Firebase leads with local leads
-      const mergedLeads = [...leads];
-      firebaseLeads.forEach(fbLead => {
-        const idx = mergedLeads.findIndex(l => l.id === fbLead.id);
-        if (idx >= 0) {
-          // Update existing lead if Firebase version is newer
-          if (fbLead.lastUpdated > (mergedLeads[idx].lastUpdated || 0)) {
-            mergedLeads[idx] = fbLead;
-          }
-        } else {
-          // Add new lead from Firebase
-          mergedLeads.push(fbLead);
-        }
-      });
-      setLeads(mergedLeads);
+      // Firebase is the source of truth - use Firebase leads directly
+      // This ensures all team members see the same data in real-time
+      setLeads(firebaseLeads);
     });
     return unsubscribe;
   }, [firebaseConnected]);
@@ -450,7 +451,7 @@ export default function CRM() {
       // Fetch details for each lead (phone/website)
       newLeads.forEach(lead => {
         service.getDetails({ placeId: lead.id, fields: ['formatted_phone_number', 'website'] }, (place) => {
-          if (place) setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, phone: place.formatted_phone_number || null, website: place.website || null } : l));
+          if (place) setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, phone: place.formatted_phone_number || null, website: place.website || null, lastUpdated: Date.now() } : l));
         });
       });
       
@@ -505,7 +506,7 @@ export default function CRM() {
       const service = new window.google.maps.places.PlacesService(mapInstance.current);
       newLeads.forEach(lead => {
         service.getDetails({ placeId: lead.id, fields: ['formatted_phone_number', 'website'] }, (place) => {
-          if (place) setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, phone: place.formatted_phone_number || null, website: place.website || null } : l));
+          if (place) setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, phone: place.formatted_phone_number || null, website: place.website || null, lastUpdated: Date.now() } : l));
         });
       });
       
