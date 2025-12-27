@@ -26,35 +26,6 @@ const SpreadsheetPage = () => {
   const inputRef = useRef(null);
   const exportMenuRef = useRef(null);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      // Escape - clear selection or close export menu
-      if (e.key === 'Escape') {
-        if (showExportMenu) {
-          setShowExportMenu(false);
-        } else if (selectedRows.size > 0) {
-          setSelectedRows(new Set());
-        }
-      }
-      // Ctrl/Cmd + A - select all (when not editing)
-      if ((e.ctrlKey || e.metaKey) && e.key === 'a' && !editingCell) {
-        e.preventDefault();
-        setSelectedRows(new Set(filteredLeads.map(l => l.id)));
-      }
-      // Delete - delete selected
-      if (e.key === 'Delete' && selectedRows.size > 0 && !editingCell) {
-        if (window.confirm(`Delete ${selectedRows.size} leads?`)) {
-          selectedRows.forEach(id => deleteLead(id));
-          setSelectedRows(new Set());
-        }
-      }
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedRows, showExportMenu, editingCell, filteredLeads]);
-
   // Close export menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -159,6 +130,35 @@ const SpreadsheetPage = () => {
 
     return result;
   }, [leads, filters, sortConfig]);
+
+  // Keyboard shortcuts (must be after filteredLeads is defined)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Escape - clear selection or close export menu
+      if (e.key === 'Escape') {
+        if (showExportMenu) {
+          setShowExportMenu(false);
+        } else if (selectedRows.size > 0) {
+          setSelectedRows(new Set());
+        }
+      }
+      // Ctrl/Cmd + A - select all (when not editing)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a' && !editingCell) {
+        e.preventDefault();
+        setSelectedRows(new Set(filteredLeads.map(l => l.id)));
+      }
+      // Delete - delete selected
+      if (e.key === 'Delete' && selectedRows.size > 0 && !editingCell) {
+        if (window.confirm(`Delete ${selectedRows.size} leads?`)) {
+          selectedRows.forEach(id => deleteLead(id));
+          setSelectedRows(new Set());
+        }
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedRows, showExportMenu, editingCell, filteredLeads]);
 
   // Handle sort
   const handleSort = (key) => {

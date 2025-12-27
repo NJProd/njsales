@@ -17,7 +17,7 @@ const LEAD_STATUSES = [
 ];
 
 // Team members
-const TEAM_MEMBERS = ['Javi', 'Iamiah'];
+const TEAM_MEMBERS = ['Javi', 'Iamiah', 'Nolan'];
 
 // Google Sheets Web App URL (set this after deploying the Apps Script)
 const SHEETS_URL = localStorage.getItem('sheetsUrl') || '';
