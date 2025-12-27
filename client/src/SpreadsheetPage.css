@@ -176,6 +176,111 @@
   background: rgba(239, 68, 68, 0.25);
 }
 
+.bulk-actions .clear-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid #475569;
+  border-radius: 6px;
+  color: #94a3b8;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.bulk-actions .clear-btn:hover {
+  background: #334155;
+  color: #e2e8f0;
+}
+
+/* Export Dropdown */
+.export-dropdown {
+  position: relative;
+}
+
+.export-btn {
+  padding: 8px 14px;
+  background: #334155;
+  border: 1px solid #475569;
+  border-radius: 8px;
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.export-btn:hover {
+  background: #475569;
+  border-color: #64748b;
+}
+
+.export-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  min-width: 200px;
+  z-index: 100;
+  overflow: hidden;
+}
+
+.export-menu-section {
+  padding: 8px 0;
+  border-bottom: 1px solid #334155;
+}
+
+.export-menu-section:last-child {
+  border-bottom: none;
+}
+
+.export-menu-label {
+  display: block;
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.export-menu button {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  color: #e2e8f0;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.export-menu button:hover {
+  background: rgba(45, 212, 191, 0.1);
+  color: #2dd4bf;
+}
+
+.copy-success {
+  font-size: 13px;
+  font-weight: 600;
+  color: #4ade80;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateX(-5px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
 /* Spreadsheet Container */
 .spreadsheet-container {
   flex: 1;
@@ -468,6 +573,11 @@
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.selected-info {
+  color: #2dd4bf;
+  font-weight: 600;
 }
 
 .tip {

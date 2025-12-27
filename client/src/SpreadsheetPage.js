@@ -12,6 +12,7 @@ const SpreadsheetPage = () => {
   const [editingCell, setEditingCell] = useState(null); // { id, field }
   const [editValue, setEditValue] = useState('');
   const [selectedRows, setSelectedRows] = useState(new Set());
+  const [lastSelectedIndex, setLastSelectedIndex] = useState(null); // For shift-click range selection
   const [sortConfig, setSortConfig] = useState({ key: 'lastUpdated', direction: 'desc' });
   const [filters, setFilters] = useState({
     search: '',
@@ -20,7 +21,53 @@ const SpreadsheetPage = () => {
     date: 'all'
   });
   const [currentUser, setCurrentUser] = useState(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(false);
   const inputRef = useRef(null);
+  const exportMenuRef = useRef(null);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Escape - clear selection or close export menu
+      if (e.key === 'Escape') {
+        if (showExportMenu) {
+          setShowExportMenu(false);
+        } else if (selectedRows.size > 0) {
+          setSelectedRows(new Set());
+        }
+      }
+      // Ctrl/Cmd + A - select all (when not editing)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a' && !editingCell) {
+        e.preventDefault();
+        setSelectedRows(new Set(filteredLeads.map(l => l.id)));
+      }
+      // Delete - delete selected
+      if (e.key === 'Delete' && selectedRows.size > 0 && !editingCell) {
+        if (window.confirm(`Delete ${selectedRows.size} leads?`)) {
+          selectedRows.forEach(id => deleteLead(id));
+          setSelectedRows(new Set());
+        }
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedRows, showExportMenu, editingCell, filteredLeads]);
+
+  // Close export menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) {
+        setShowExportMenu(false);
+      }
+    };
+    
+    if (showExportMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showExportMenu]);
 
   // Load current user
   useEffect(() => {
@@ -165,13 +212,37 @@ const SpreadsheetPage = () => {
   };
 
   // Toggle row selection
-  const toggleRowSelection = (id) => {
-    setSelectedRows(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const toggleRowSelection = (id, event, rowIndex) => {
+    // Shift+click for range selection
+    if (event?.shiftKey && lastSelectedIndex !== null) {
+      const start = Math.min(lastSelectedIndex, rowIndex);
+      const end = Math.max(lastSelectedIndex, rowIndex);
+      const newSelection = new Set(selectedRows);
+      for (let i = start; i <= end; i++) {
+        newSelection.add(filteredLeads[i].id);
+      }
+      setSelectedRows(newSelection);
+      return;
+    }
+    
+    // Ctrl/Cmd+click for multi-select
+    if (event?.ctrlKey || event?.metaKey) {
+      setSelectedRows(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+    } else {
+      // Normal click toggles single selection
+      setSelectedRows(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+    }
+    setLastSelectedIndex(rowIndex);
   };
 
   // Select all
@@ -180,6 +251,74 @@ const SpreadsheetPage = () => {
       setSelectedRows(new Set());
     } else {
       setSelectedRows(new Set(filteredLeads.map(l => l.id)));
+    }
+  };
+
+  // Clear selection
+  const clearSelection = () => {
+    setSelectedRows(new Set());
+    setLastSelectedIndex(null);
+  };
+
+  // Get selected leads data
+  const getSelectedLeads = () => {
+    return filteredLeads.filter(l => selectedRows.has(l.id));
+  };
+
+  // Export to CSV
+  const exportToCSV = (leadsToExport) => {
+    const headers = ['Name', 'Phone', 'Address', 'Status', 'Notes', 'Added By', 'Calls', 'Last Updated'];
+    const rows = leadsToExport.map(lead => [
+      lead.name || '',
+      lead.phone || '',
+      lead.address || '',
+      lead.status || 'NEW',
+      (lead.notes || '').replace(/"/g, '""'), // Escape quotes
+      lead.addedBy || '',
+      lead.callHistory?.length || 0,
+      lead.lastUpdated ? new Date(lead.lastUpdated).toISOString() : ''
+    ]);
+    
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `leads-export-${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setShowExportMenu(false);
+  };
+
+  // Copy to clipboard
+  const copyToClipboard = async (leadsToExport) => {
+    const text = leadsToExport.map(lead => 
+      `${lead.name}\t${lead.phone || ''}\t${lead.address || ''}\t${lead.status || 'NEW'}\t${lead.addedBy || ''}`
+    ).join('\n');
+    
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+    setShowExportMenu(false);
+  };
+
+  // Export selected or all
+  const handleExport = (type, scope) => {
+    const leadsToExport = scope === 'selected' ? getSelectedLeads() : filteredLeads;
+    if (type === 'csv') {
+      exportToCSV(leadsToExport);
+    } else if (type === 'clipboard') {
+      copyToClipboard(leadsToExport);
     }
   };
 
@@ -275,13 +414,42 @@ const SpreadsheetPage = () => {
         </div>
 
         <div className="toolbar-right">
+          {/* Export menu (always visible) */}
+          <div className="export-dropdown" ref={exportMenuRef}>
+            <button 
+              className="export-btn" 
+              onClick={() => setShowExportMenu(!showExportMenu)}
+            >
+              📥 Export ▾
+            </button>
+            {showExportMenu && (
+              <div className="export-menu">
+                <div className="export-menu-section">
+                  <span className="export-menu-label">Export All ({filteredLeads.length})</span>
+                  <button onClick={() => handleExport('csv', 'all')}>📄 Download CSV</button>
+                  <button onClick={() => handleExport('clipboard', 'all')}>📋 Copy to Clipboard</button>
+                </div>
+                {selectedRows.size > 0 && (
+                  <div className="export-menu-section">
+                    <span className="export-menu-label">Export Selected ({selectedRows.size})</span>
+                    <button onClick={() => handleExport('csv', 'selected')}>📄 Download CSV</button>
+                    <button onClick={() => handleExport('clipboard', 'selected')}>📋 Copy to Clipboard</button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          
+          {copySuccess && <span className="copy-success">✓ Copied!</span>}
+
           {selectedRows.size > 0 && (
             <div className="bulk-actions">
               <span className="selected-count">{selectedRows.size} selected</span>
               <select onChange={(e) => { if (e.target.value) { bulkStatusChange(e.target.value); e.target.value = ''; }}}>
-                <option value="">Change Status...</option>
+                <option value="">Status...</option>
                 {LEAD_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
+              <button className="clear-btn" onClick={clearSelection} title="Clear selection">✕</button>
               <button className="delete-btn" onClick={bulkDelete}>🗑️ Delete</button>
             </div>
           )}
@@ -320,13 +488,23 @@ const SpreadsheetPage = () => {
           </thead>
           <tbody>
             {filteredLeads.map((lead, rowIndex) => (
-              <tr key={lead.id} className={selectedRows.has(lead.id) ? 'selected' : ''}>
+              <tr 
+                key={lead.id} 
+                className={selectedRows.has(lead.id) ? 'selected' : ''}
+                onClick={(e) => {
+                  // Row click with Shift/Ctrl selects without needing checkbox
+                  if (e.shiftKey || e.ctrlKey || e.metaKey) {
+                    e.preventDefault();
+                    toggleRowSelection(lead.id, e, rowIndex);
+                  }
+                }}
+              >
                 {/* Checkbox */}
                 <td className="cell cell-checkbox">
                   <input 
                     type="checkbox" 
                     checked={selectedRows.has(lead.id)}
-                    onChange={() => toggleRowSelection(lead.id)}
+                    onChange={(e) => toggleRowSelection(lead.id, e.nativeEvent, rowIndex)}
                   />
                 </td>
 
@@ -471,9 +649,15 @@ const SpreadsheetPage = () => {
           <span>Total: {leads.length} leads</span>
           <span>•</span>
           <span>Showing: {filteredLeads.length}</span>
+          {selectedRows.size > 0 && (
+            <>
+              <span>•</span>
+              <span className="selected-info">Selected: {selectedRows.size}</span>
+            </>
+          )}
         </div>
         <div className="footer-right">
-          <span className="tip">💡 Double-click a cell to edit</span>
+          <span className="tip">💡 Shift+Click for range • Ctrl+A select all • Delete key to remove • Double-click to edit</span>
         </div>
       </footer>
     </div>
